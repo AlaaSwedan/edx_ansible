@@ -1,0 +1,57 @@
+---
+#
+# edX Configuration
+#
+# github:     https://github.com/edx/configuration
+# wiki:       https://github.com/edx/configuration/wiki
+# code style: https://github.com/edx/configuration/wiki/Ansible-Coding-Conventions
+# license:    https://github.com/edx/configuration/blob/master/LICENSE.TXT
+#
+#
+#
+# Tasks for role openstack
+#
+
+- name: Install system packages
+  apt:
+    pkg: "{{','.join(openstack_debian_pkgs)}}"
+    state: present
+    update_cache: yes
+
+- name: Install openstack python packages
+  pip:
+    name: "{{ item }}"
+    state: present
+    extra_args: "-i {{ COMMON_PYPI_MIRROR_URL }}"
+  with_items: "{{ openstack_pip_pkgs }}"
+
+- name: Create log sync script
+  template:
+    src: send-logs-to-swift.j2
+    dest: "{{ openstack_log_sync_script }}"
+    mode: 0755
+    owner: root
+    group: root
+  when: COMMON_OBJECT_STORE_LOG_SYNC
+
+- name: Upload openstack credentials for log script
+  template:
+    src: log-sync-env.sh.j2
+    dest: "{{ openstack_log_sync_script_environment }}"
+    mode: 0600
+    owner: root
+    group: root
+  when: COMMON_OBJECT_STORE_LOG_SYNC
+
+- name: Create symlink for log sync script
+  file:
+    state: link
+    src: "{{ openstack_log_sync_script }}"
+    dest: "{{ COMMON_OBJECT_STORE_LOG_SYNC_SCRIPT }}"
+  when: COMMON_OBJECT_STORE_LOG_SYNC
+
+# We want to ensure that OpenStack requirements are installed at the same time as edxapp
+# requirements so that they're available during the initial migration.
+- name: make sure Openstack Python requirements get installed
+  set_fact:
+    edxapp_requirements_files: "{{ edxapp_requirements_files + [openstack_requirements_file] }}"
